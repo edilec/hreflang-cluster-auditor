@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { auditPages, sortFindings, statusFor } from '../src/index.mjs'
+import { RULE_IDS, auditPages, buildReport, byCodeUnit, exitCodeFor, sortFindings, statusFor } from '../src/index.mjs'
 import { ORIGIN, healthyCluster, pageRecord } from './helpers.mjs'
 
 function ruleIdsOf(findings) {
@@ -11,6 +11,107 @@ function ruleIdsOf(findings) {
 function run(pages, xDefault = 'optional') {
   return auditPages(pages, { xDefault })
 }
+
+const A = `${ORIGIN}/a/`
+const B = `${ORIGIN}/b/`
+const COUNTS = { checked: 0, clusters: 0, alternates: 0, xDefault: 'optional' }
+
+/** Every error the audit itself can report. The loader's errors live in project.test.mjs. */
+const AUDIT_ERRORS = [
+  'canonical-self-link-conflict',
+  'cluster-hreflang-conflict',
+  'duplicate-hreflang-tag',
+  'invalid-alternate-url',
+  'invalid-canonical-url',
+  'invalid-language-tag',
+  'missing-reciprocal-alternate',
+  'missing-self-alternate',
+  'multiple-canonical',
+  'multiple-x-default',
+  'reciprocal-tag-mismatch',
+  'x-default-conflict',
+  'x-default-missing',
+  'x-default-not-allowed',
+]
+
+/**
+ * One page set per error, so the catalog's severities are pinned by behaviour
+ * and not only by the table they are declared in: a rule downgraded to
+ * `warning` in `src/rules.mjs` (and in the documentation alongside it) turns
+ * the run these fixtures provoke from exit 1 into exit 0.
+ */
+const ERROR_FIXTURES = [
+  ['canonical-self-link-conflict', 'optional', () => [
+    pageRecord(A, [['en', A]], { file: 'a.html', hasHtml: true, canonicals: [B] }),
+  ]],
+  ['cluster-hreflang-conflict', 'optional', () => [
+    pageRecord(A, [['en', A], ['de', B]], { file: 'a.html' }),
+    pageRecord(B, [['en', B], ['de', A]], { file: 'b.html' }),
+  ]],
+  ['duplicate-hreflang-tag', 'optional', () => [
+    pageRecord(A, [['en', A], ['en', B]], { file: 'a.html' }),
+    pageRecord(B, [['en', A], ['en', B]], { file: 'b.html' }),
+  ]],
+  ['invalid-alternate-url', 'optional', () => [
+    pageRecord(A, [['en', A], ['de', 'mailto:someone@example.com']], { file: 'a.html' }),
+  ]],
+  ['invalid-canonical-url', 'optional', () => [
+    pageRecord(A, [['en', A]], { file: 'a.html', hasHtml: true, canonicals: ['mailto:someone@example.com'] }),
+  ]],
+  ['invalid-language-tag', 'optional', () => [
+    pageRecord(A, [['en', A], ['not a tag', A]], { file: 'a.html' }),
+  ]],
+  ['missing-reciprocal-alternate', 'optional', () => [
+    pageRecord(A, [['en', A], ['de', B]], { file: 'a.html' }),
+    pageRecord(B, [['de', B]], { file: 'b.html' }),
+  ]],
+  ['missing-self-alternate', 'optional', () => [
+    pageRecord(A, [['de', B]], { file: 'a.html' }),
+    pageRecord(B, [['de', B]], { file: 'b.html' }),
+  ]],
+  ['multiple-canonical', 'optional', () => [
+    pageRecord(A, [['en', A]], { file: 'a.html', hasHtml: true, canonicals: [A, A] }),
+  ]],
+  ['multiple-x-default', 'optional', () => [
+    pageRecord(A, [['en', A], ['de', B], ['x-default', A], ['x-default', B]], { file: 'a.html' }),
+    pageRecord(B, [['en', A], ['de', B]], { file: 'b.html' }),
+  ]],
+  ['reciprocal-tag-mismatch', 'optional', () => [
+    pageRecord(A, [['en', A], ['de', B]], { file: 'a.html' }),
+    pageRecord(B, [['en', A], ['fr', B]], { file: 'b.html' }),
+  ]],
+  ['x-default-conflict', 'optional', () => [
+    pageRecord(A, [['en', A], ['de', B], ['x-default', A]], { file: 'a.html' }),
+    pageRecord(B, [['en', A], ['de', B], ['x-default', B]], { file: 'b.html' }),
+  ]],
+  ['x-default-missing', 'required', () => [
+    pageRecord(A, [['en', A], ['de', B]], { file: 'a.html' }),
+    pageRecord(B, [['en', A], ['de', B]], { file: 'b.html' }),
+  ]],
+  ['x-default-not-allowed', 'forbidden', () => [
+    pageRecord(A, [['en', A], ['de', B], ['x-default', A]], { file: 'a.html' }),
+    pageRecord(B, [['en', A], ['de', B], ['x-default', A]], { file: 'b.html' }),
+  ]],
+]
+
+test('every error the audit can report has a fixture', () => {
+  assert.deepEqual(ERROR_FIXTURES.map(([ruleId]) => ruleId).sort(byCodeUnit), AUDIT_ERRORS)
+  for (const ruleId of AUDIT_ERRORS) {
+    assert.equal(RULE_IDS.includes(ruleId), true, `${ruleId} is not a rule`)
+  }
+})
+
+test('each error the audit reports fails the run and exits 1 on its own', () => {
+  for (const [ruleId, xDefault, build] of ERROR_FIXTURES) {
+    const reported = sortFindings(run(build(), xDefault).findings).filter((finding) => finding.ruleId === ruleId)
+    assert.equal(reported.length > 0, true, `the ${ruleId} fixture no longer reports ${ruleId}`)
+    for (const finding of reported) {
+      assert.equal(finding.severity, 'error', `${ruleId} is no longer an error`)
+    }
+    assert.equal(statusFor(reported), 'fail', `${ruleId} alone no longer fails the run`)
+    assert.equal(exitCodeFor(buildReport(reported, COUNTS)), 1, `${ruleId} alone no longer exits 1`)
+  }
+})
 
 test('a complete cluster of regional variants with an x-default is not a failure', () => {
   const audit = run(healthyCluster())

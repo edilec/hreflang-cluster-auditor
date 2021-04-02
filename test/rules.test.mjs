@@ -9,7 +9,9 @@ import {
   RULE_IDS,
   RULE_SEVERITY,
   SEVERITIES,
+  buildReport,
   byCodeUnit,
+  exitCodeFor,
   marksEvidenceMissing,
   severityFor,
   sortFindings,
@@ -42,13 +44,89 @@ async function documentedLimits() {
   return limits
 }
 
-test('the severity table is frozen and complete', () => {
+/**
+ * The catalog, written out by hand.
+ *
+ * `docs/hreflang-rules.md` holds the other copy, and the cross-check between
+ * the documentation and the table is defeated by editing both sides at once --
+ * which is exactly the shape a silent severity downgrade takes. This third copy
+ * is deliberate duplication: each row states, independently of `src/rules.mjs`,
+ * what a run holding one finding of that rule reports and exits with.
+ */
+const CATALOG = [
+  // ruleId, severity, marks evidence missing, status of a run holding only it
+  ['alternate-limit-exceeded', 'error', true, 'incomplete'],
+  ['alternate-not-in-inputs', 'warning', true, 'incomplete'],
+  ['alternate-source-conflict', 'error', false, 'fail'],
+  ['canonical-self-link-conflict', 'error', false, 'fail'],
+  ['cluster-hreflang-conflict', 'error', false, 'fail'],
+  ['cluster-membership-incomplete', 'warning', false, 'pass'],
+  ['duplicate-alternate-entry', 'warning', false, 'pass'],
+  ['duplicate-hreflang-tag', 'error', false, 'fail'],
+  ['html-not-utf8', 'error', true, 'incomplete'],
+  ['html-too-large', 'error', true, 'incomplete'],
+  ['html-unreadable', 'error', true, 'incomplete'],
+  ['invalid-alternate-url', 'error', false, 'fail'],
+  ['invalid-canonical-url', 'error', false, 'fail'],
+  ['invalid-language-tag', 'error', false, 'fail'],
+  ['language-tag-not-canonical-case', 'info', false, 'pass'],
+  ['missing-canonical', 'warning', false, 'pass'],
+  ['missing-reciprocal-alternate', 'error', false, 'fail'],
+  ['missing-self-alternate', 'error', false, 'fail'],
+  ['multiple-canonical', 'error', false, 'fail'],
+  ['multiple-x-default', 'error', false, 'fail'],
+  ['no-pages-checked', 'error', true, 'incomplete'],
+  ['page-limit-exceeded', 'error', true, 'incomplete'],
+  ['reciprocal-tag-mismatch', 'error', false, 'fail'],
+  ['sitemap-index-not-expanded', 'error', true, 'incomplete'],
+  ['sitemap-not-utf8', 'error', true, 'incomplete'],
+  ['sitemap-too-large', 'error', true, 'incomplete'],
+  ['sitemap-unparsable', 'error', true, 'incomplete'],
+  ['sitemap-unreadable', 'error', true, 'incomplete'],
+  ['sitemap-url-limit-exceeded', 'error', true, 'incomplete'],
+  ['x-default-conflict', 'error', false, 'fail'],
+  ['x-default-missing', 'error', false, 'fail'],
+  ['x-default-not-allowed', 'error', false, 'fail'],
+]
+
+const CATALOG_IDS = CATALOG.map(([ruleId]) => ruleId)
+const EXIT_CODE = { pass: 0, fail: 1, incomplete: 2 }
+const COUNTS = { checked: 0, clusters: 0, alternates: 0, xDefault: 'optional' }
+
+test('the severity table is frozen, complete and in code unit order', () => {
   assert.equal(Object.isFrozen(RULE_SEVERITY), true)
-  assert.equal(RULE_IDS.length, Object.keys(RULE_SEVERITY).length)
-  assert.deepEqual(RULE_IDS, [...RULE_IDS].sort(byCodeUnit))
+  assert.equal(Object.isFrozen(RULE_IDS), true)
+  // Not `[...RULE_IDS].sort(byCodeUnit)`: re-sorting an array with the
+  // comparator it was built from cannot fail. Adjacent pairs are compared
+  // directly instead, and the whole list is pinned against CATALOG.
+  for (let index = 1; index < RULE_IDS.length; index += 1) {
+    assert.equal(RULE_IDS[index - 1] < RULE_IDS[index], true, `${RULE_IDS[index]} is out of code unit order`)
+  }
+  assert.deepEqual([...RULE_IDS], CATALOG_IDS)
+  assert.deepEqual(Object.keys(RULE_SEVERITY).sort(byCodeUnit), CATALOG_IDS)
   for (const ruleId of RULE_IDS) {
     assert.equal(SEVERITIES.includes(RULE_SEVERITY[ruleId]), true, `${ruleId} has an unknown severity`)
   }
+})
+
+test('every rule pins its own severity, evidence class, status and exit code', () => {
+  assert.deepEqual(CATALOG_IDS, [...RULE_IDS], 'CATALOG and RULE_IDS list different rules')
+  for (const [ruleId, severity, evidenceMissing, status] of CATALOG) {
+    assert.equal(RULE_SEVERITY[ruleId], severity, `${ruleId} severity differs from the pinned catalog`)
+    assert.equal(marksEvidenceMissing(ruleId), evidenceMissing, `${ruleId} evidence class differs from the pinned catalog`)
+    const finding = makeFinding(ruleId, 'message', {})
+    assert.equal(finding.severity, severity, `${ruleId} finding severity differs from the pinned catalog`)
+    assert.equal(statusFor([finding]), status, `${ruleId} alone no longer reports ${status}`)
+    assert.equal(
+      exitCodeFor(buildReport([finding], COUNTS)),
+      EXIT_CODE[status],
+      `${ruleId} alone no longer exits ${EXIT_CODE[status]}`,
+    )
+  }
+  assert.deepEqual(
+    CATALOG.filter(([, , evidenceMissing]) => evidenceMissing).map(([ruleId]) => ruleId),
+    [...EVIDENCE_MISSING_RULES],
+  )
 })
 
 test('an unknown rule id throws instead of defaulting to something harmless', () => {
