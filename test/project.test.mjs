@@ -103,6 +103,33 @@ test('undecodable bytes are the error, and a literal replacement character is no
   assert.equal(report.summary.checked, 1)
 })
 
+test('an undecodable export is incomplete on its own, with nothing else to hide behind', async (t) => {
+  // The test above reaches `incomplete` through two evidence-missing findings
+  // at once, so it cannot tell which of them carries the status. Here the
+  // undecodable page is named by the config and referenced by nothing, so
+  // html-not-utf8 is the only finding: if it stops marking evidence missing,
+  // this run drops from incomplete/exit 2 to fail/exit 1.
+  const root = await withProject(t, {
+    'build/en.html': htmlPage({ canonical: `${ORIGIN}/en/`, alternates: [['en', `${ORIGIN}/en/`]] }),
+    'build/fr.html': Buffer.concat([
+      Buffer.from('<html><head>', 'utf8'),
+      Buffer.from([0xff, 0xfe, 0x41]),
+      Buffer.from('</head></html>', 'utf8'),
+    ]),
+    'hreflang.config.json': configJson({
+      pages: [
+        { url: `${ORIGIN}/en/`, html: 'build/en.html' },
+        { url: `${ORIGIN}/fr/`, html: 'build/fr.html' },
+      ],
+    }),
+  })
+  const report = await checkProject({ config: join(root, 'hreflang.config.json') })
+  assert.deepEqual(triples(report), [['html-not-utf8', 'build/fr.html', '/pages/1']])
+  assert.equal(report.status, 'incomplete')
+  assert.equal(exitCodeFor(report), 2)
+  assert.equal(report.summary.checked, 1)
+})
+
 test('a file that stats but cannot be opened is unreadable, not a pass', async (t) => {
   if (process.getuid === undefined || process.getuid() === 0) return
   const root = await withProject(t, pairProject())
