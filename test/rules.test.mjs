@@ -218,6 +218,45 @@ test('findings sort by file, then pointer, then rule, then message', () => {
   assert.equal(sortFindings(findings) !== findings, true)
 })
 
+test('findings are ordered by code unit at every level, not by locale collation', () => {
+  // 'B' precedes 'a' by code unit and follows it under locale collation, so a
+  // comparison swapped for localeCompare at any level inverts one of these.
+  const order = (findings) => sortFindings(findings).map((finding) => finding.message)
+
+  assert.deepEqual(
+    order([
+      makeFinding('missing-canonical', 'lower', { file: 'build/a.html', pointer: '/pages/1' }),
+      makeFinding('missing-canonical', 'upper', { file: 'build/B.html', pointer: '/pages/0' }),
+    ]),
+    ['upper', 'lower'],
+    'location.file is not compared by code unit',
+  )
+  assert.deepEqual(
+    order([
+      makeFinding('missing-canonical', 'lower', { file: 'one.html', pointer: '/pages/a' }),
+      makeFinding('missing-canonical', 'upper', { file: 'one.html', pointer: '/pages/B' }),
+    ]),
+    ['upper', 'lower'],
+    'location.pointer is not compared by code unit',
+  )
+  assert.deepEqual(
+    order([
+      makeFinding('missing-canonical', 'https://example.com/a/ has no canonical', { file: 'one.html', pointer: '/pages/0' }),
+      makeFinding('missing-canonical', 'https://example.com/B/ has no canonical', { file: 'one.html', pointer: '/pages/0' }),
+    ]),
+    ['https://example.com/B/ has no canonical', 'https://example.com/a/ has no canonical'],
+    'message is not compared by code unit',
+  )
+  assert.deepEqual(
+    sortFindings([
+      makeFinding('missing-canonical', 'm', { file: 'one.html', pointer: '/pages/0' }),
+      makeFinding('invalid-canonical-url', 'm', { file: 'one.html', pointer: '/pages/0' }),
+    ]).map((finding) => finding.ruleId),
+    ['invalid-canonical-url', 'missing-canonical'],
+    'ruleId is not compared by code unit',
+  )
+})
+
 test('byCodeUnit orders by code unit, not by locale collation', () => {
   const names = ['MAX_DUPLICATE_URL_ENTRIES', 'MAX_DUPLICATE_URLS']
   assert.deepEqual([...names].sort(byCodeUnit), ['MAX_DUPLICATE_URLS', 'MAX_DUPLICATE_URL_ENTRIES'])

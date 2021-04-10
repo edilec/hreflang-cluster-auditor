@@ -67,6 +67,49 @@ test('the same inputs produce byte-identical reports', async () => {
   assert.equal(first, second)
 })
 
+test('the report is ordered by code unit, not by locale collation', async (t) => {
+  // 'B' precedes 'a' by code unit and follows it under locale collation, so
+  // this order inverts if findings are compared with localeCompare.
+  const UPPER = `${ORIGIN}/B/`
+  const LOWER = `${ORIGIN}/a/`
+  const both = [['en', UPPER], ['de', LOWER]]
+  const root = await withProject(t, {
+    'build/B.html': htmlPage({ alternates: both }),
+    'build/a.html': htmlPage({ alternates: both }),
+    'hreflang.config.json': configJson({
+      pages: [
+        { url: UPPER, html: 'build/B.html' },
+        { url: LOWER, html: 'build/a.html' },
+      ],
+    }),
+  })
+  const report = await checkProject({ config: join(root, 'hreflang.config.json') })
+  assert.deepEqual(triples(report), [
+    ['missing-canonical', 'build/B.html', '/pages/0'],
+    ['missing-canonical', 'build/a.html', '/pages/1'],
+  ])
+})
+
+test('the alternate signature of a source is ordered by code unit', async (t) => {
+  // The signature decides whether two sources agree, and it is reported as the
+  // evidence of a conflict. Sorting it by locale collation would reorder that
+  // evidence -- and make agreement depend on ICU data.
+  const PAGE = `${ORIGIN}/page/`
+  const UPPER = `${ORIGIN}/B/`
+  const LOWER = `${ORIGIN}/a/`
+  const root = await withProject(t, {
+    'build/page.html': htmlPage({ canonical: PAGE, alternates: [['en', PAGE]] }),
+    'sitemap.xml': sitemapXml([[PAGE, [['en', UPPER], ['en', LOWER]]]]),
+    'hreflang.config.json': configJson({
+      pages: [{ url: PAGE, html: 'build/page.html' }],
+      sitemaps: ['sitemap.xml'],
+    }),
+  })
+  const report = await checkProject({ config: join(root, 'hreflang.config.json') })
+  assert.deepEqual(triples(report), [['alternate-source-conflict', 'sitemap.xml', '/sitemaps/0/urls/0']])
+  assert.equal(report.findings[0].evidence, `en ${UPPER} | en ${LOWER}`)
+})
+
 test('an exported page that could not be read is incomplete, never a pass', async (t) => {
   const files = pairProject()
   delete files['build/fr.html']

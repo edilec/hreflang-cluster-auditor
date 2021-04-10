@@ -123,6 +123,52 @@ test('a complete cluster of regional variants with an x-default is not a failure
   )
 })
 
+test('ordering inside the audit is by code unit, not by locale collation', () => {
+  // 'B' precedes 'a' by code unit and follows it under locale collation. Each
+  // case below is decided by one of the audit's own sorts: which URLs a message
+  // lists, which page a cluster finding is reported against, which referrer is
+  // named, and which member a cluster is described as starting at.
+  const UPPER = `${ORIGIN}/B/`
+  const LOWER = `${ORIGIN}/a/`
+  const MISSING = `${ORIGIN}/missing/`
+  const upper = (alternates) => pageRecord(UPPER, alternates, { file: 'B.html', pointer: '/pages/0' })
+  const lower = (alternates) => pageRecord(LOWER, alternates, { file: 'a.html', pointer: '/pages/1' })
+  const only = (audit, ruleId) => sortFindings(audit.findings).filter((finding) => finding.ruleId === ruleId)
+
+  const conflicts = only(run([
+    upper([['en', UPPER], ['de', LOWER]]),
+    lower([['en', LOWER], ['de', UPPER]]),
+  ]), 'cluster-hreflang-conflict')
+  assert.equal(conflicts.length, 2)
+  for (const finding of conflicts) {
+    assert.equal(finding.location.file, 'B.html', finding.message)
+    assert.equal(finding.message.includes(`${UPPER}, ${LOWER}`), true, finding.message)
+  }
+
+  const unknown = only(run([
+    upper([['en', UPPER], ['de', LOWER], ['fr', MISSING]]),
+    lower([['en', UPPER], ['de', LOWER], ['fr', MISSING]]),
+  ]), 'alternate-not-in-inputs')
+  assert.equal(unknown.length, 1)
+  assert.equal(unknown[0].location.file, 'B.html')
+  assert.equal(unknown[0].message.includes(`including ${UPPER},`), true, unknown[0].message)
+
+  const missing = only(run([
+    upper([['en', UPPER], ['de', LOWER]]),
+    lower([['en', UPPER], ['de', LOWER]]),
+  ], 'required'), 'x-default-missing')
+  assert.deepEqual(missing.map((finding) => finding.location), [{ file: 'B.html', pointer: '/pages/0' }])
+  assert.equal(missing[0].message.includes(`starting at ${UPPER}`), true, missing[0].message)
+
+  const xConflict = only(run([
+    upper([['en', UPPER], ['de', LOWER], ['x-default', UPPER]]),
+    lower([['en', UPPER], ['de', LOWER], ['x-default', LOWER]]),
+  ]), 'x-default-conflict')
+  assert.equal(xConflict.length, 1)
+  assert.equal(xConflict[0].location.file, 'B.html')
+  assert.equal(xConflict[0].message.includes(`${UPPER}, ${LOWER}`), true, xConflict[0].message)
+})
+
 test('a missing reciprocal alternate is reported once, on the page that fails to link back', () => {
   const pages = healthyCluster().map((page) => {
     if (page.url !== `${ORIGIN}/de-de/`) return page
