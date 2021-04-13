@@ -106,9 +106,16 @@ export function runCli(args, options = {}) {
     execFile(
       process.execPath,
       [BIN, ...args],
-      { cwd: options.cwd ?? REPO, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+      {
+        cwd: options.cwd ?? REPO,
+        encoding: 'utf8',
+        maxBuffer: 32 * 1024 * 1024,
+        // `timeout` kills a child that never returns, so a test can assert that
+        // the CLI came back at all instead of hanging the suite with it.
+        ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+      },
       (error, stdout, stderr) => {
-        resolvePromise({ code: error === null ? 0 : error.code, stdout, stderr })
+        resolvePromise({ code: error === null ? 0 : error.code, killed: error !== null && error.killed === true, stdout, stderr })
       },
     )
   })

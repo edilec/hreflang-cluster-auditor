@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmod } from 'node:fs/promises'
+import { chmod, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
 
@@ -185,6 +185,31 @@ test('a file that stats but cannot be opened is unreadable, not a pass', async (
     [['html-unreadable', 'build/fr.html', '/pages/1']],
   )
   assert.equal(report.findings.find((finding) => finding.ruleId === 'html-unreadable').message.includes('EACCES'), true)
+})
+
+test('a path that is not a regular file is refused rather than opened', async (t) => {
+  // The guard that produces this reason is the one that keeps the tool from
+  // opening a device or a named pipe planted in the input root. Without it the
+  // directory below is opened and reported as EISDIR, and a FIFO blocks forever.
+  const root = await withProject(t, {
+    'build/en.html': htmlPage({ canonical: `${ORIGIN}/en/`, alternates: [['en', `${ORIGIN}/en/`]] }),
+    'hreflang.config.json': configJson({
+      pages: [
+        { url: `${ORIGIN}/en/`, html: 'build/en.html' },
+        { url: `${ORIGIN}/fr/`, html: 'build/fr.html' },
+      ],
+    }),
+  })
+  await mkdir(join(root, 'build/fr.html'), { recursive: true })
+  const report = await checkProject({ config: join(root, 'hreflang.config.json') })
+  assert.deepEqual(triples(report), [['html-unreadable', 'build/fr.html', '/pages/1']])
+  assert.equal(report.status, 'incomplete')
+  assert.equal(exitCodeFor(report), 2)
+  assert.equal(
+    report.findings[0].message.includes('not a regular file'),
+    true,
+    report.findings[0].message,
+  )
 })
 
 test('a byte limit is enforced and reported, not truncated', async (t) => {

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import test from 'node:test'
 
@@ -135,6 +136,32 @@ test('unreadable evidence exits 2 and still carries a report saying what was not
     [['alternate-not-in-inputs', 'build/en.html'], ['html-unreadable', 'build/fr.html']],
   )
   assert.equal(run.stderr.includes('Status incomplete.'), true)
+})
+
+test('a named pipe in the input root is refused, and the run still returns', async (t) => {
+  const root = await makeProject({
+    'build/keep.txt': 'the build directory has to exist before the pipe is made\n',
+    'hreflang.config.json': configJson({ pages: [{ url: `${ORIGIN}/en/`, html: 'build/en.html' }] }),
+  })
+  t.after(() => removeProject(root))
+  const made = await new Promise((resolvePromise) => {
+    execFile('mkfifo', [join(root, 'build/en.html')], (error) => resolvePromise(error === null))
+  })
+  if (!made) return // no mkfifo here; the guard is covered by the directory case
+
+  // Opening a FIFO for reading blocks until a writer appears, so a tool that
+  // stats a path and opens it anyway never comes back. The timeout kills the
+  // child; `code` is then not 2 and this fails rather than hanging the suite.
+  const run = await runCli(['--config', join(root, 'hreflang.config.json'), '--json'], { timeout: 15000 })
+  assert.equal(run.killed, false, 'the CLI had to be killed: it opened the pipe and blocked')
+  assert.equal(run.code, 2)
+  const report = JSON.parse(run.stdout)
+  assert.equal(report.status, 'incomplete')
+  assert.deepEqual(
+    report.findings.map((finding) => [finding.ruleId, finding.location.file]),
+    [['html-unreadable', 'build/en.html']],
+  )
+  assert.equal(report.findings[0].message.includes('not a regular file'), true, report.findings[0].message)
 })
 
 test('reported file locations stay relative to the input root', async (t) => {
