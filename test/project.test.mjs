@@ -3,7 +3,8 @@ import { chmod, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { ConfigError, checkProject, exitCodeFor, validateConfig } from '../src/index.mjs'
+import { ConfigError, byCodeUnit, checkProject, exitCodeFor, validateConfig } from '../src/index.mjs'
+import { EVIDENCE_LIMIT } from '../src/rules.mjs'
 import { ORIGIN, REPO, configJson, htmlPage, makeProject, removeProject, sitemapXml, triples } from './helpers.mjs'
 
 const CLEAN = join(REPO, 'examples/clean/hreflang.config.json')
@@ -210,6 +211,47 @@ test('a path that is not a regular file is refused rather than opened', async (t
     true,
     report.findings[0].message,
   )
+})
+
+test('a huge attribute value is bounded in the message, not only in the evidence', async (t) => {
+  // Every one of these findings quotes the offending value back. The quote is
+  // untrusted input: without the same bound the evidence field uses, a 20000
+  // character attribute becomes a 20000 character message and the report grows
+  // to the size of the input.
+  const hugeTag = 'e'.repeat(20000)
+  const hugeHref = `${ORIGIN}/${'p'.repeat(20000)}`
+  const root = await withProject(t, {
+    'build/en.html': [
+      '<!doctype html>',
+      '<html>',
+      '  <head>',
+      `    <link rel="canonical" href="${hugeHref}">`,
+      `    <link rel="alternate" hreflang="${hugeTag}" href="${ORIGIN}/en/">`,
+      `    <link rel="alternate" hreflang="en" href="${hugeHref}">`,
+      '  </head>',
+      '  <body></body>',
+      '</html>',
+      '',
+    ].join('\n'),
+    'hreflang.config.json': configJson({ pages: [{ url: `${ORIGIN}/en/`, html: 'build/en.html' }] }),
+  })
+  const report = await checkProject({ config: join(root, 'hreflang.config.json') })
+  assert.deepEqual(
+    report.findings.map((finding) => finding.ruleId).sort(byCodeUnit),
+    ['invalid-alternate-url', 'invalid-canonical-url', 'invalid-language-tag'],
+  )
+  for (const finding of report.findings) {
+    assert.equal(finding.evidence.length <= EVIDENCE_LIMIT, true, `${finding.ruleId} evidence is ${finding.evidence.length} characters`)
+    assert.equal(
+      finding.message.length <= EVIDENCE_LIMIT + 200,
+      true,
+      `${finding.ruleId} message is ${finding.message.length} characters`,
+    )
+    assert.equal(finding.message.includes('e'.repeat(EVIDENCE_LIMIT + 1)), false, `${finding.ruleId} quotes the value in full`)
+    assert.equal(finding.message.includes('p'.repeat(EVIDENCE_LIMIT + 1)), false, `${finding.ruleId} quotes the value in full`)
+  }
+  // A 60 kB page of junk must not become a 60 kB report.
+  assert.equal(JSON.stringify(report).length < 4000, true, `the report is ${JSON.stringify(report).length} characters`)
 })
 
 test('a byte limit is enforced and reported, not truncated', async (t) => {

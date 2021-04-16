@@ -12,12 +12,13 @@ import {
   buildReport,
   byCodeUnit,
   exitCodeFor,
+  renderReport,
   marksEvidenceMissing,
   severityFor,
   sortFindings,
   statusFor,
 } from '../src/index.mjs'
-import { makeFinding } from '../src/rules.mjs'
+import { EVIDENCE_LIMIT, excerpt, makeFinding } from '../src/rules.mjs'
 
 const DOC = fileURLToPath(new URL('../docs/hreflang-rules.md', import.meta.url))
 
@@ -127,6 +128,34 @@ test('every rule pins its own severity, evidence class, status and exit code', (
     CATALOG.filter(([, , evidenceMissing]) => evidenceMissing).map(([ruleId]) => ruleId),
     [...EVIDENCE_MISSING_RULES],
   )
+})
+
+test('an excerpt of untrusted input is collapsed and bounded', () => {
+  assert.equal(excerpt('  a\n\t b  '), 'a b')
+  assert.equal(excerpt('a\u2028b\u2029c'), 'a b c', 'the separators are whitespace too')
+  assert.equal(excerpt(''), '')
+
+  const atBound = 'x'.repeat(EVIDENCE_LIMIT)
+  assert.equal(excerpt(atBound), atBound, 'a value exactly at the bound is not truncated')
+
+  const past = excerpt('x'.repeat(EVIDENCE_LIMIT * 100))
+  assert.equal(past.length, EVIDENCE_LIMIT)
+  assert.equal(past, `${'x'.repeat(EVIDENCE_LIMIT - 3)}...`)
+
+  // Collapsing happens before the bound, so padding is not a way past it.
+  assert.equal(excerpt('y '.repeat(EVIDENCE_LIMIT * 2)).length, EVIDENCE_LIMIT)
+})
+
+test('the rendered report escapes the separators JSON leaves raw', () => {
+  const report = buildReport(
+    [makeFinding('missing-canonical', 'a\u2028b\u2029c', { file: 'build/odd\u2028name.html' })],
+    COUNTS,
+  )
+  const text = renderReport(report)
+  assert.deepEqual(JSON.parse(text), report, 'the payload no longer parses as JSON')
+  assert.equal(/[\u2028\u2029]/u.test(text), false, 'a raw line separator reached stdout')
+  assert.equal(text.includes('\\u2028'), true)
+  assert.equal(text.endsWith('}\n'), true)
 })
 
 test('an unknown rule id throws instead of defaulting to something harmless', () => {

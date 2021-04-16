@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { X_DEFAULT_POLICIES, checkProject, exitCodeFor, formatSummary } from '../src/index.mjs'
+import { X_DEFAULT_POLICIES, checkProject, exitCodeFor, formatSummary, renderReport } from '../src/index.mjs'
 
 const HELP = `hreflang-cluster-auditor
 
@@ -84,7 +84,7 @@ async function main(argv) {
     return 2
   }
 
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
+  process.stdout.write(renderReport(report))
   if (!options.json) process.stderr.write(formatSummary(report))
   return exitCodeFor(report)
 }

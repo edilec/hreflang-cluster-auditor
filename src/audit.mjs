@@ -11,9 +11,13 @@
  * A URL that some page names but no input describes is not a pass and not a
  * failure: it is missing evidence. The tool cannot see that page's declarations,
  * so it refuses to conclude anything about the reciprocity of that edge.
+ *
+ * Every attribute value quoted back into a message goes through `excerpt`, the
+ * same bound the `evidence` field uses. A message is untrusted input too: a
+ * 200000 character hreflang must not become a 200000 character message.
  */
 
-import { at, byCodeUnit, makeFinding } from './rules.mjs'
+import { at, byCodeUnit, excerpt, makeFinding } from './rules.mjs'
 import { X_DEFAULT, normalizeUrl, parseLanguageTag } from './tags.mjs'
 
 export const X_DEFAULT_POLICIES = Object.freeze(['optional', 'required', 'forbidden'])
@@ -48,7 +52,7 @@ function resolvePage(page, findings) {
     if (!target.ok) {
       findings.push(makeFinding(
         'invalid-alternate-url',
-        `The alternate href ${JSON.stringify(String(entry.href ?? ''))} could not be used: ${target.reason}.`,
+        `The alternate href ${JSON.stringify(excerpt(entry.href ?? ''))} could not be used: ${target.reason}.`,
         at(page.file, entry.pointer),
         { evidence: entry.raw, suggestion: 'Use an absolute http or https URL, or a path that resolves against this page.' },
       ))
@@ -60,7 +64,7 @@ function resolvePage(page, findings) {
     if (tag.kind === 'invalid') {
       findings.push(makeFinding(
         'invalid-language-tag',
-        `The hreflang value ${JSON.stringify(String(entry.hreflang ?? ''))} is not a well-formed BCP 47 tag: ${tag.reason}.`,
+        `The hreflang value ${JSON.stringify(excerpt(entry.hreflang ?? ''))} is not a well-formed BCP 47 tag: ${tag.reason}.`,
         at(page.file, entry.pointer),
         { evidence: entry.raw, suggestion: 'Use a BCP 47 tag such as "en", "en-GB" or "zh-Hant-TW", or the literal "x-default".' },
       ))
@@ -150,7 +154,7 @@ function resolvePage(page, findings) {
       if (!canonical.ok) {
         findings.push(makeFinding(
           'invalid-canonical-url',
-          `The canonical href ${JSON.stringify(String(page.canonicals[0].href ?? ''))} could not be used: ${canonical.reason}.`,
+          `The canonical href ${JSON.stringify(excerpt(page.canonicals[0].href ?? ''))} could not be used: ${canonical.reason}.`,
           at(page.file, page.canonicals[0].pointer),
           { evidence: page.canonicals[0].raw, suggestion: 'Use an absolute http or https URL.' },
         ))

@@ -46,6 +46,11 @@ npx hreflang-cluster-auditor --config site/hreflang.config.json --root site --js
 stdout carries the JSON report and nothing else. stderr carries the human
 summary and diagnostics.
 
+Values quoted out of an input document are bounded at 200 characters wherever
+they appear, in a finding's `message` as well as in its `evidence`, so a
+pathological attribute cannot inflate the report. U+2028 and U+2029 are escaped
+on stdout, which keeps the payload valid JavaScript as well as valid JSON.
+
 | Exit | Meaning |
 | ---: | --- |
 | `0` | every cluster was complete and consistent |

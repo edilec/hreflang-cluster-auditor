@@ -466,6 +466,19 @@ export async function checkProject({ config, root, xDefault }) {
   })
 }
 
+/**
+ * Serialise the report for stdout.
+ *
+ * `JSON.stringify` leaves U+2028 and U+2029 raw, and inside a JavaScript string
+ * literal those two are line terminators. The payload parses as JSON either
+ * way, but an exported file name carrying one would break a consumer that
+ * evaluates the payload as JavaScript, so both are escaped here. Nothing else
+ * about the text changes.
+ */
+export function renderReport(report) {
+  return `${JSON.stringify(report, null, 2).replace(/\u2028/gu, '\\u2028').replace(/\u2029/gu, '\\u2029')}\n`
+}
+
 export function exitCodeFor(report) {
   if (report.status === 'pass') return 0
   if (report.status === 'fail') return 1

@@ -129,6 +129,19 @@ of any cluster and are skipped, so an ordinary monolingual sitemap entry never
 becomes a finding. A page named in `config.pages` is always audited, so a page
 declared there with no alternates at all does report `missing-self-alternate`.
 
+## Untrusted input in the report
+
+Every value a finding quotes out of an input document -- an `hreflang`, an
+`href`, the raw `<link>` element -- is passed through one bounded,
+whitespace-collapsed excerpt of at most 200 characters, in the `message` as
+well as in the `evidence` field. A 200000 character attribute produces a
+200 character quote, not a 200000 character report.
+
+The report on stdout escapes U+2028 and U+2029. Both are legal raw inside a
+JSON string and neither is legal raw inside a JavaScript string literal, so
+escaping them keeps the payload parseable by consumers that evaluate it rather
+than parse it. The escaping is the only difference from `JSON.stringify`.
+
 ## Determinism
 
 Findings sort by `(location.file, location.pointer, ruleId, message)`, each
