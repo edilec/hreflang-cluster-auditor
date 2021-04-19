@@ -30,34 +30,42 @@ test('well-formed BCP 47 tags parse to their canonical spelling', () => {
   }
 })
 
-test('malformed tags are rejected with a reason', () => {
+test('malformed tags are rejected, and the reason says which rule they broke', () => {
+  // The reason is what a reader acts on, so each case pins its own text rather
+  // than asserting that some non-empty string came back.
   const rejected = [
-    'fr_FR',
-    'e',
-    '',
-    '   ',
-    'en-',
-    '-en',
-    'en--GB',
-    'x-custom',
-    'de-1996-1996',
-    'toolongsubtag',
-    'en-a',
-    'en-x',
-    '123',
-    'en-GB-GB',
-    'en-GB-a-b-a-c',
-    'a'.repeat(MAX_TAG_LENGTH + 1),
+    ['fr_FR', 'the subtag "fr_fr" is not made of ASCII letters and digits'],
+    ['e', 'the primary language subtag "e" is shorter than 2 characters'],
+    ['', 'the hreflang attribute is empty'],
+    ['   ', 'the hreflang attribute is empty'],
+    ['en-', 'it has an empty subtag, so a separator is doubled or trailing'],
+    ['-en', 'it has an empty subtag, so a separator is doubled or trailing'],
+    ['en--GB', 'it has an empty subtag, so a separator is doubled or trailing'],
+    ['x-custom', 'only "x-default" is meaningful as a private-use hreflang value'],
+    ['de-1996-1996', 'the variant subtag "1996" is repeated'],
+    ['toolongsubtag', 'the subtag "toolongsubtag" is longer than the 8 character maximum'],
+    ['en-a', 'the extension "a" carries no subtags'],
+    ['en-x', 'the private-use section "x" carries no subtags'],
+    ['123', 'the primary language subtag "123" must be letters only'],
+    ['en-GB-GB', 'the subtag "gb" does not fit the BCP 47 grammar in that position'],
+    ['en-GB-a-b-a-c', 'the extension "a" carries no subtags'],
+    ['a'.repeat(MAX_TAG_LENGTH + 1), `the tag is ${MAX_TAG_LENGTH + 1} characters, over the ${MAX_TAG_LENGTH} character bound`],
   ]
-  for (const input of rejected) {
+  for (const [input, reason] of rejected) {
     const parsed = parseLanguageTag(input)
-    assert.equal(parsed.kind, 'invalid', `expected ${JSON.stringify(input)} to be rejected`)
-    assert.equal(parsed.key, null)
-    assert.equal(typeof parsed.reason, 'string')
-    assert.equal(parsed.reason.length > 0, true)
+    assert.deepEqual(
+      { kind: parsed.kind, key: parsed.key, canonical: parsed.canonical, reason: parsed.reason },
+      { kind: 'invalid', key: null, canonical: null, reason },
+      `parsing ${JSON.stringify(input)}`,
+    )
   }
-  assert.equal(parseLanguageTag(undefined).kind, 'invalid')
-  assert.equal(parseLanguageTag(42).kind, 'invalid')
+  for (const absent of [undefined, 42, null, {}]) {
+    assert.deepEqual(
+      { kind: parseLanguageTag(absent).kind, reason: parseLanguageTag(absent).reason },
+      { kind: 'invalid', reason: 'the hreflang attribute is absent' },
+      `parsing ${JSON.stringify(absent)}`,
+    )
+  }
 })
 
 test('regional variants are distinct tags and never collapse to their language', () => {

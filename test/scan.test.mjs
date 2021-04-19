@@ -117,7 +117,8 @@ test('a sitemap index is identified rather than expanded', () => {
 test('a document that is not a sitemap is refused rather than guessed at', () => {
   const scan = scanSitemap('<html><body>not a sitemap</body></html>', { maxUrls: 10, maxAlternates: 10 })
   assert.equal(scan.kind, 'unknown')
-  assert.equal(typeof scan.reason, 'string')
+  assert.equal(scan.reason, 'no <urlset> element was found, so this is not a sitemap export')
+  assert.deepEqual(scan.entries, [])
 })
 
 test('a url entry with no loc is kept so it can be reported', () => {
