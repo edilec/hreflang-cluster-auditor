@@ -108,8 +108,10 @@ no findings.
 
 Severity is declared once, in one frozen `ruleId -> severity` table, and every
 finding takes its severity from it. A finding built with an unknown rule id
-throws. The table is asserted against the documented catalog in both directions,
-so a rule cannot be quietly downgraded in either place.
+throws. The table is asserted three ways: against the documented catalog in both
+directions, against a hand-written copy in the test suite, and against the exit
+code each rule actually produces on a fixture that provokes it. Downgrading a
+rule in the table and the documentation together still fails the suite.
 
 ## Limits and non-goals
 

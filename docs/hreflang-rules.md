@@ -8,8 +8,14 @@ and is recorded in the changelog.
 Severity is declared once, in `RULE_SEVERITY` in `src/rules.mjs`, and every
 finding takes its severity from that table. A finding built with an unknown rule
 id throws. The table in this document is asserted against the code in both
-directions by `test/rules.test.mjs`, so a rule cannot be quietly downgraded here
-or there.
+directions by `test/rules.test.mjs`.
+
+That cross-check alone is not the defence, because editing this file and the
+code together satisfies it. `test/rules.test.mjs` therefore carries a third,
+hand-written copy of the catalog and asserts the status and exit code each rule
+produces, and `test/audit.test.mjs` carries one page-set fixture per error the
+audit can report and asserts that the finding alone exits 1. A downgrade has to
+get past all three.
 
 - any `error` finding, and no missing evidence, means **fail** and exit 1
 - `warning` and `info` findings alone mean **pass** and exit 0
