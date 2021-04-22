@@ -120,3 +120,42 @@ test('unusable URLs are rejected with a reason', () => {
   assert.equal(normalizeUrl(undefined).ok, false)
   assert.equal(normalizeUrl(null, 'https://example.com/').ok, false)
 })
+
+test('each URL rejection names its own reason, not a shared one', () => {
+  // The reason text is what a reader acts on: "absent" and "not absolute" call
+  // for different fixes. Collapsing them into one message would leave the suite
+  // green while making every rejection say the same unhelpful thing, so each
+  // reason is pinned distinctly here.
+  const cases = [
+    [undefined, undefined, /href attribute is absent/],
+    ['', undefined, /href attribute is empty/],
+    ['   ', undefined, /href attribute is empty/],
+    ['x'.repeat(5000), undefined, /characters, over the .* character bound/],
+    ['/relative/only', undefined, /not an absolute URL/],
+    ['ftp://example.com/a', undefined, /scheme "ftp" is neither http nor https/],
+    ['mailto:someone@example.com', undefined, /scheme "mailto" is neither http nor https/],
+  ]
+
+  const seen = new Set()
+  for (const [raw, base, expected] of cases) {
+    const result = normalizeUrl(raw, base)
+    assert.equal(result.ok, false, `${String(raw).slice(0, 20)} should be rejected`)
+    assert.equal(result.url, null)
+    assert.match(result.reason, expected)
+    seen.add(result.reason.replace(/\d+/g, 'N'))
+  }
+
+  // Six distinct reasons across the seven cases. Only the blank and
+  // whitespace-only hrefs share one; the two unsupported schemes each name the
+  // scheme they found, so they read differently on purpose.
+  assert.equal(seen.size, 6, `expected six distinct reasons, got ${[...seen].join(' | ')}`)
+})
+
+test('a relative href resolved against a base names a different reason than an absolute one', () => {
+  // Without a base, anything non-absolute is rejected for that reason. With a
+  // base, most relative strings resolve fine, so the reason only differs for a
+  // string the URL parser itself cannot handle.
+  assert.match(normalizeUrl('::::', undefined).reason, /not an absolute URL/)
+  assert.equal(normalizeUrl('::::', 'https://example.com/a').ok, true)
+  assert.match(normalizeUrl('http://[', 'https://example.com/a').reason, /could not be resolved as a URL/)
+})
