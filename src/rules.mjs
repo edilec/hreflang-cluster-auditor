@@ -100,6 +100,41 @@ export function excerpt(text) {
   return flat.length > EVIDENCE_LIMIT ? `${flat.slice(0, EVIDENCE_LIMIT - 3)}...` : flat
 }
 
+const QUOTED_INPUT = /^Unexpected token (.{1,12}?), (?:\.\.\.)?".*"(?:\.\.\.)? is not valid JSON$/s
+const PARSE_POSITION = /\bat position \d+(?: \(line \d+ column \d+\))?$/
+const PARSE_EMPTY = /^Unexpected end of JSON input$/
+
+/**
+ * The useful half of a `JSON.parse` failure, without the config content V8 puts
+ * in the other half.
+ *
+ * V8 reports a parse failure in two shapes. One names a position and quotes
+ * nothing. The other quotes the input back:
+ * `Unexpected token 'A', "AKIAIOSFODNN7EXAMPLE" is not valid JSON` -- the whole
+ * config when it is short, a window around the offence when it is not. A config
+ * short enough to be only a credential is therefore reproduced in full by its
+ * own error message, on the path taken by the config that has not been
+ * validated.
+ *
+ * `excerpt` is not a defence here: it collapses whitespace and trims from the
+ * END, while the quoted span sits at the front, far inside the 200-character
+ * bound.
+ *
+ * The quoting shape is recognised FIRST. Looking for `at position` first would
+ * be defeated by a config that merely CONTAINS that phrase, because the quoted
+ * span would then be kept as though V8 had written it.
+ *
+ * Only the offending token survives from the quoting shape. The quoted span
+ * never leaves this function.
+ */
+export function parseFailureDetail(error) {
+  const message = String(error?.message ?? '')
+  const quoted = QUOTED_INPUT.exec(message)
+  if (quoted !== null) return `unexpected token ${quoted[1]}`
+  if (PARSE_POSITION.test(message) || PARSE_EMPTY.test(message)) return message
+  return 'it could not be parsed as JSON'
+}
+
 export function at(file, pointer) {
   const location = {}
   if (file !== null && file !== undefined) location.file = file

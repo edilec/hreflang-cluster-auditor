@@ -143,6 +143,14 @@ whitespace-collapsed excerpt of at most 200 characters, in the `message` as
 well as in the `evidence` field. A 200000 character attribute produces a
 200 character quote, not a 200000 character report.
 
+A config that cannot be parsed is bounded the same way, and it takes more than an excerpt. V8
+reports an invalid document two ways, and one of them embeds the input:
+`Unexpected token 'A', "AKIAIOSFODNN7EXAMPLE" is not valid JSON` reproduces a short config in full,
+and a longer one through a window around the offence. An excerpt cannot reach it, because an
+excerpt trims from the end while the quoted span sits at the front. The refusal keeps only the
+useful half -- the position, line and column where V8 reports them, and the offending token where
+it does not -- so the config nothing has validated is also the config that is not repeated back.
+
 The report on stdout escapes U+2028 and U+2029. Both are legal raw inside a
 JSON string and neither is legal raw inside a JavaScript string literal, so
 escaping them keeps the payload parseable by consumers that evaluate it rather

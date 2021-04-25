@@ -28,6 +28,7 @@ import {
   byCodeUnit,
   makeFinding,
   marksEvidenceMissing,
+  parseFailureDetail,
   severityFor,
   sortFindings,
   statusFor,
@@ -45,6 +46,7 @@ export {
   byCodeUnit,
   compareFindings,
   marksEvidenceMissing,
+  parseFailureDetail,
   severityFor,
   sortFindings,
   statusFor,
@@ -410,7 +412,7 @@ export async function checkProject({ config, root, xDefault }) {
   try {
     document = JSON.parse(await readFile(configPath, 'utf8'))
   } catch (error) {
-    throw new ConfigError(`Could not load the config (${error.code ?? error.message})`)
+    throw new ConfigError(`Could not load the config (${error.code ?? parseFailureDetail(error)})`)
   }
   const validated = validateConfig(document, { xDefault })
 
