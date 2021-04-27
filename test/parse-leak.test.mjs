@@ -124,3 +124,82 @@ test('a non-Error, and an error with no message, still produce a usable detail',
   assert.equal(parseFailureDetail({}), 'it could not be parsed as JSON')
   assert.equal(parseFailureDetail(new Error('')), 'it could not be parsed as JSON')
 })
+
+/**
+ * The output contract of `parseFailureDetail`, pinned against the adversarial
+ * document the cases above do not reach.
+ *
+ * A config whose own text reads `at position 1` makes V8 write
+ * `Unexpected token 'a', "at position 1" is not valid JSON`. Two things in the
+ * helper keep that config out of the detail, and they work together: the
+ * quoting shape is recognised FIRST, and `PARSE_POSITION` is anchored to the
+ * END of the message, so an offset found INSIDE a quoted span cannot be
+ * mistaken for the offset V8 appended. Rebuild that branch as the unanchored
+ * `slice` other tools in this catalog once used and the first case below fails
+ * with the config in the message. (Swapping only the order, with the anchor
+ * kept, does not fail -- measured. The anchor is carrying that half.)
+ */
+
+const EXPECT_LOWER_A = "unexpected token 'a'"
+const EXPECT_BRACE = "unexpected token '}'"
+const GENERIC = 'it could not be parsed as JSON'
+
+/** The detail for a document that must not parse. */
+function detailOf(document) {
+  let thrown = null
+  try {
+    JSON.parse(document)
+  } catch (error) {
+    thrown = error
+  }
+  assert.notEqual(thrown, null, `${JSON.stringify(document)} was supposed to be unparseable`)
+  return parseFailureDetail(thrown)
+}
+
+/** No prefix of `document` from four characters up survives into the detail. */
+function assertNoPrefixOf(document, detail, label) {
+  for (let length = Math.min(document.length, 40); length >= 4; length -= 1) {
+    const prefix = document.slice(0, length)
+    assert.equal(detail.includes(prefix), false, `${label}: the detail carries ${JSON.stringify(prefix)}`)
+  }
+}
+
+test('a document whose own text reads "at position 1" does not smuggle itself out', () => {
+  const detail = detailOf('at position 1')
+  assert.equal(detail.includes('"'), false, `a quoted span survived: ${detail}`)
+  assert.equal(detail.includes('at position 1'), false, `the document came back: ${detail}`)
+  assert.equal(detail, EXPECT_LOWER_A)
+})
+
+test('a document that is nothing but a credential never appears in the detail', () => {
+  const detail = detailOf(CANARY)
+  assert.equal(detail.includes(CANARY), false, `the canary came back: ${detail}`)
+  assertNoPrefixOf(CANARY, detail, 'credential-only document')
+})
+
+test('a long document does not leak the ten characters V8 quotes from its head', () => {
+  const document = `${CANARY} followed by a great deal of content nobody should read back`
+  const detail = detailOf(document)
+  assertNoPrefixOf(document, detail, 'long document')
+})
+
+test('a quoted span carrying a newline is still recognised as the quoting shape', () => {
+  // Without the `s` flag the quoting branch misses this message entirely and
+  // the detail collapses to the generic sentence.
+  const detail = detailOf('}x\n')
+  assert.equal(detail.includes('"'), false, `a quoted span survived: ${detail}`)
+  assert.equal(detail, EXPECT_BRACE)
+})
+
+test('the genuinely safe positional form keeps its position, line and column', () => {
+  // A helper that answered the generic sentence for everything would pass every
+  // leak case above while destroying every diagnostic. This is the pin.
+  const detail = detailOf('{"a": 1 "b": 2}')
+  assert.match(detail, /at position 8 \(line 1 column 9\)$/)
+  assert.equal(detail.includes('"'), false, `a quoted span survived: ${detail}`)
+  assert.notEqual(detail, GENERIC)
+})
+
+test('an empty document keeps V8 own words, unchanged', () => {
+  assert.equal(detailOf(''), 'Unexpected end of JSON input')
+})
