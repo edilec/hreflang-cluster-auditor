@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1",
+  "pages": [
+    {
+      "url": "https://example.com/en-us/",
+      "html": "build/en-us.html"
+    },
+    {
+      "url": "https://example.com/en-gb/",
+      "html": "build/en-gb.html"
+    },
+    {
+      "url": "https://example.com/de-de/",
+      "html": "build/de-de.html"
+    },
+    {
+      "url": "https://example.com/fr/",
+      "html": "build/fr.html"
+    }
+  ],
+  "sitemaps": [
+    "sitemap.xml"
+  ],
+  "xDefault": "optional"
+}
