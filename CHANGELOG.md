@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-28
+
 ### Added
 
 - Locale cluster construction from exported HTML pages and sitemap `urlset`
@@ -31,8 +33,3 @@ All notable changes to this project are recorded here. The format follows
 - stdout escapes U+2028 and U+2029. Both are legal raw in JSON and are line
   terminators in a JavaScript string literal, so a file name carrying one
   produced a payload that parsed as JSON but broke a consumer evaluating it.
-
-### Notes
-
-- `0.1.0` is the version recorded in `package.json`. No release has been
-  published.
