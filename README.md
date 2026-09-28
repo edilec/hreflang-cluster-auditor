@@ -18,20 +18,23 @@ Nothing is fetched. Every page the audit reasons about comes from a file inside
 a declared input root, and a URL that some page names but no input describes is
 reported as missing evidence rather than quietly assumed correct.
 
-## Install
+## Run locally
 
 Node 22 or newer. No runtime dependencies, no dev dependencies, Node built-ins
 only.
 
 ```sh
-npm install hreflang-cluster-auditor
+git clone https://github.com/edilec/hreflang-cluster-auditor.git
+cd hreflang-cluster-auditor
 ```
+
+The package is not published to npm; run it from a checkout.
 
 ## Use
 
 ```sh
-npx hreflang-cluster-auditor --config examples/clean/hreflang.config.json
-npx hreflang-cluster-auditor --config site/hreflang.config.json --root site --json
+node bin/hreflang-cluster-auditor.mjs --config examples/clean/hreflang.config.json
+node bin/hreflang-cluster-auditor.mjs --config site/hreflang.config.json --root site --json
 ```
 
 ```
@@ -91,7 +94,7 @@ The full rule catalog, the limits and the configuration schema are in
 Run it against the two example projects in `examples/`:
 
 ```
-$ npx hreflang-cluster-auditor --config examples/broken/hreflang.config.json
+$ node bin/hreflang-cluster-auditor.mjs --config examples/broken/hreflang.config.json
 ERROR   missing-reciprocal-alternate    build/de-de.html /pages/2
 ERROR   canonical-self-link-conflict    build/en-gb.html /pages/1/canonicals/0
 WARNING duplicate-alternate-entry       build/en-us.html /pages/0/alternates/5
