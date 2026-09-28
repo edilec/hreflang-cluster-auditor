@@ -147,6 +147,11 @@ It also never writes to the site it audits, never fetches anything, and refuses
 any configured path that leaves the input root, whether by spelling or through a
 symbolic link.
 
+For generation and live monitoring around this local export check, see Edilec's
+[hreflang at scale guide](https://edilec.com/blog/proeng-11043/hreflang-at-scale-generation-validation-monitoring/).
+This CLI verifies supplied files; it does not observe search-engine selection or
+the live site's responses.
+
 ## Determinism
 
 Findings sort by `(location.file, location.pointer, ruleId, message)`, each
